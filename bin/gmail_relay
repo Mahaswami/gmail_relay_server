@@ -1,0 +1,12 @@
+#!/usr/bin/ruby1.8
+#--
+# Copyright goes here
+# All rights reserved.
+# See LICENSE.txt for permissions. (Need to create a license.txt)
+#++
+
+
+lib_dir = File.expand_path(  File.join(File.dirname(__FILE__), "..", "lib"  ))
+class_path = Dir[File.join(lib_dir, "*.jar")].join(':')
+puts class_path
+`java -classpath #{class_path} com.mahaswami.mail.SMTPRelayServer`

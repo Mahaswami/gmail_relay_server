@@ -1,0 +1,95 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package com.mahaswami.mail;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+import java.io.OutputStream;
+import org.mailster.smtp.SMTPServer;
+import org.mailster.smtp.api.SessionContext;
+import org.mailster.smtp.api.TooMuchDataException;
+import org.mailster.smtp.api.listener.MessageListenerAdapter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class SMTPRelayServer {
+
+    private static Logger log = (Logger) LoggerFactory.getLogger(SMTPRelayServer.class);
+    private static String MAIL_STORAGE_DIR = "/var/smtp_relay_data";
+
+    public static void main(String[] args) {
+        File storage_dir = new File(MAIL_STORAGE_DIR);
+        if (storage_dir.exists() == false || storage_dir.isDirectory() == false || storage_dir.canWrite() == false) {
+            log.error(MAIL_STORAGE_DIR + " directory either doesn't exist, or not a directory or write permission not available");
+            System.exit(1);
+        }
+        Thread thread = new Thread(new Runnable() {
+
+            public void run() {
+                while (true) {
+                    log.debug("Waking from sleep");
+                    File dir = new File(MAIL_STORAGE_DIR);
+                    File[] allFiles = dir.listFiles();
+                    log.debug("Number of messages awaiting to be sent: " + allFiles.length);
+                    for (File file : allFiles) {
+                        FileInputStream fis = null;
+                        try {
+                            fis = new FileInputStream(file);
+                            log.debug("Sending a message");
+                            new SendMail().postMail(fis, "xxx@xx.com", "xxxx");
+                        } catch (FileNotFoundException ex) {
+                            log.error(null, ex);
+                        } finally {
+                            try {
+                                fis.close();
+                                log.debug("Deleting file " + file.getName());
+                                file.delete();
+                                log.debug("File exists: " + file.getName() + " - " + file.exists());
+                            } catch (IOException ex) {
+                                log.error(null, ex);
+                            }
+                        }
+                    }
+                    try {
+                        log.debug("Going to sleep...");
+                        Thread.sleep(10000);
+                    } catch (InterruptedException ex) {
+                        log.error(null, ex);
+                    }
+                }
+
+            }
+        });
+        thread.start();
+        SMTPServer server = new SMTPServer(new MessageListenerAdapter() {
+
+            @Override
+            public void deliver(SessionContext ctx, String from, String recipient,
+                    InputStream data) throws TooMuchDataException, IOException {
+                log.debug("New message received");
+                String fileName = "mail-" + new Long(new java.util.Random().nextLong()).toString() + ".txt";
+                FileOutputStream fos = new FileOutputStream(MAIL_STORAGE_DIR + "/" + fileName);
+                writeToStream(data, fos);
+                fos.close();
+            }
+        });
+        server.setPort(9025);
+        server.start();
+        log.info("Server started.");
+    }
+
+    private static void writeToStream(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[4 * 1024];
+        int numRead = 0;
+        while ((numRead = in.read(buf)) >= 0) {
+            out.write(buf, 0, numRead);
+        }
+    }
+}
